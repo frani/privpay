@@ -72,7 +72,7 @@ function LandingPage() {
           {authenticated && (
           <Button
             onClick={() => navigate('/dashboard')}
-            colorScheme="blue"
+            colorScheme="green"
             size="lg"
             px={8}
             py={6}
