@@ -49,9 +49,9 @@ function LandingPage() {
             Welcome to PrivPay
           </Heading>
           <Text fontSize="xl" color="gray.600">
-            Easy for Merchants.
-            Simple for Customers.
-            Private for everyone.
+            <b>Easy</b> for Merchants.{' '}
+            <b>Simple</b> for Customers.{' '}
+            <b>Private</b> for everyone.
           </Text>
           { !authenticated && (
           <Button
