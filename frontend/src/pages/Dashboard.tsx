@@ -36,11 +36,14 @@ function Dashboard() {
   const [checkouts, setCheckouts] = useState<Checkout[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [balance, setBalance] = useState<string | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(true)
 
   useEffect(() => {
     if (user?.id) {
       syncUserWithBackend()
       fetchCheckouts()
+      fetchBalance()
     }
   }, [user?.id])
 
@@ -102,6 +105,25 @@ function Dashboard() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchBalance = async () => {
+    if (!user?.id) return
+
+    try {
+      setBalanceLoading(true)
+      const response = await apiClient.get('/api/user/balance', {
+        headers: {
+          Authorization: `Bearer ${user.id}`,
+        },
+      })
+      setBalance(response.data.balanceFormatted)
+    } catch (error) {
+      console.error('Error fetching balance:', error)
+      // Don't show toast for balance errors, just log it
+    } finally {
+      setBalanceLoading(false)
     }
   }
 
@@ -200,6 +222,35 @@ function Dashboard() {
       </Box>
 
       <Container maxW="7xl" py={8}>
+        {/* Merchant Balance Panel */}
+        <Card mb={6} bg="blue.50" borderColor="blue.200" borderWidth="1px">
+          <CardBody>
+            <HStack justify="space-between" align="center">
+              <VStack align="start" spacing={1}>
+                <Text fontSize="sm" color="gray.600" fontWeight="medium">
+                  Your Balance
+                </Text>
+                {balanceLoading ? (
+                  <Spinner size="sm" color="blue.500" />
+                ) : (
+                  <Text fontSize="3xl" fontWeight="bold" color="blue.600">
+                    ${balance !== null ? parseFloat(balance).toFixed(2) : '0.00'} USDC
+                  </Text>
+                )}
+              </VStack>
+              <Button
+                onClick={fetchBalance}
+                size="sm"
+                variant="outline"
+                colorScheme="blue"
+                isLoading={balanceLoading}
+              >
+                Refresh
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
+
         <HStack justify="space-between" mb={6}>
           <Heading size="xl" color="gray.900">
             Your Checkouts
