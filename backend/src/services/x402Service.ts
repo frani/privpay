@@ -31,6 +31,23 @@ export interface PaymentVerificationParams {
   requestId?: string
 }
 
+interface VerificationResponse {
+  valid?: boolean
+  error?: string
+  paymentHash?: string
+}
+
+interface SettlementResponse {
+  success?: boolean
+  paymentHash?: string
+  transactionHash?: string
+  error?: string
+}
+
+interface ErrorResponse {
+  error?: string
+}
+
 /**
  * Generate x402 payment instructions
  * Returns payment details formatted according to x402 protocol
@@ -94,14 +111,14 @@ export async function verifyPayment(
     })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
+      const errorData = (await response.json().catch(() => ({}))) as ErrorResponse
       return {
         valid: false,
         error: errorData.error || `Verification failed: ${response.statusText}`,
       }
     }
 
-    const result = await response.json()
+    const result = (await response.json()) as VerificationResponse
 
     if (result.valid) {
       // Settle the payment with facilitator
@@ -162,14 +179,14 @@ async function settlePayment(
     })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
+      const errorData = (await response.json().catch(() => ({}))) as ErrorResponse
       return {
         success: false,
         error: errorData.error || `Settlement failed: ${response.statusText}`,
       }
     }
 
-    const result = await response.json()
+    const result = (await response.json()) as SettlementResponse
 
     return {
       success: result.success || false,
