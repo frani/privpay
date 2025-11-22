@@ -11,7 +11,7 @@
     "install:all": "pnpm install"
   },
   "devDependencies": {
-    "pnpm": "^8.15.0"
+    "pnpm": "^10.0.0"
   }
 }
 
