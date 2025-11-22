@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose'
 
 export interface ICheckout extends Document {
   name: string
-  amount: number
+  amount: string
   status: 'pending' | 'completed' | 'failed'
   userId: mongoose.Types.ObjectId
   transactionHash?: string
@@ -17,9 +17,8 @@ const CheckoutSchema = new Schema<ICheckout>(
       required: true,
     },
     amount: {
-      type: Number,
+      type: String,
       required: true,
-      min: 0,
     },
     status: {
       type: String,

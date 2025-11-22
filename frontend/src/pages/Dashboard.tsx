@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../lib/axios'
+import { fromStorageFormat } from '../utils.js'
 import {
   Box,
   Button,
@@ -21,7 +22,7 @@ import CreateCheckoutModal from '../components/CreateCheckoutModal'
 interface Checkout {
   _id: string
   name: string
-  amount: number
+  amount: string // Stored as 6-digit string (USDC format: 1000000 = 1.00)
   createdAt: string
   status: string
 }
@@ -234,7 +235,7 @@ function Dashboard() {
                         {checkout.name}
                       </Heading>
                       <Text fontSize="2xl" fontWeight="bold" color="blue.600">
-                        ${checkout.amount.toFixed(2)}
+                        ${fromStorageFormat(checkout.amount)}
                       </Text>
                       <Text fontSize="sm" color="gray.500">
                         Created: {new Date(checkout.createdAt).toLocaleDateString()}
