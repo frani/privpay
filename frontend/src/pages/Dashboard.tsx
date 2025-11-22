@@ -9,6 +9,7 @@ import {
   Container,
   Heading,
   Text,
+  Link,
   Spinner,
   VStack,
   HStack,
@@ -179,18 +180,14 @@ function Dashboard() {
       <Box bg="white" shadow="sm" mb={8}>
         <Container maxW="7xl" py={4}>
           <HStack justify="space-between">
-            <Heading size="lg" color="gray.900">
+            <Heading size="lg" color="gray.900" onClick={() => navigate("/")} cursor="pointer">
               🗝️ PrivPay Dashboard
             </Heading>
             <HStack spacing={4}>
               <Text fontSize="sm" color="gray.600">
                 {user?.email?.address || user?.wallet?.address}
               </Text>
-              <Button
-                onClick={handleLogout}
-                colorScheme="red"
-                size="sm"
-              >
+              <Button onClick={handleLogout} colorScheme="red" size="sm">
                 Logout
               </Button>
             </HStack>
@@ -213,7 +210,12 @@ function Dashboard() {
         </HStack>
 
         {loading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" py={12}>
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            py={12}
+          >
             <Spinner size="xl" color="blue.500" />
           </Box>
         ) : checkouts.length === 0 ? (
@@ -227,7 +229,11 @@ function Dashboard() {
         ) : (
           <VStack spacing={4} align="stretch">
             {checkouts.map((checkout) => (
-              <Card key={checkout._id} _hover={{ shadow: 'md' }} transition="all 0.2s">
+              <Card
+                key={checkout._id}
+                _hover={{ shadow: "md" }}
+                transition="all 0.2s"
+              >
                 <CardBody>
                   <HStack justify="space-between" align="start">
                     <VStack align="start" spacing={2}>
@@ -238,7 +244,8 @@ function Dashboard() {
                         ${fromStorageFormat(checkout.amount)}
                       </Text>
                       <Text fontSize="sm" color="gray.500">
-                        Created: {new Date(checkout.createdAt).toLocaleDateString()}
+                        Created:{" "}
+                        {new Date(checkout.createdAt).toLocaleDateString()}
                       </Text>
                       <Badge colorScheme={getStatusColor(checkout.status)}>
                         {checkout.status}
@@ -266,7 +273,7 @@ function Dashboard() {
         />
       )}
     </Box>
-  )
+  );
 }
 
 export default Dashboard

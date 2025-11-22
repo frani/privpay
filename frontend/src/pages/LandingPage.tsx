@@ -15,12 +15,6 @@ function LandingPage() {
   const { ready, authenticated, login } = usePrivy()
   const navigate = useNavigate()
 
-  useEffect(() => {
-    if (ready && authenticated) {
-      navigate('/dashboard')
-    }
-  }, [ready, authenticated, navigate])
-
   const handleSignIn = () => {
     login()
   }
@@ -55,6 +49,7 @@ function LandingPage() {
           <Text fontSize="xl" color="gray.600">
             Secure payment checkouts powered by blockchain technology
           </Text>
+          { !authenticated && (
           <Button
             onClick={handleSignIn}
             colorScheme="blue"
@@ -69,6 +64,24 @@ function LandingPage() {
           >
             Sign In / Sign Up
           </Button>
+          )}
+          {authenticated && (
+          <Button
+            onClick={() => navigate('/dashboard')}
+            colorScheme="blue"
+            size="lg"
+            px={8}
+            py={6}
+            fontSize="md"
+            fontWeight="semibold"
+            boxShadow="lg"
+            _hover={{ transform: 'scale(1.05)' }}
+            transition="all 0.2s"
+          >
+            Go to Dashboard
+          </Button>
+          )}
+          
         </VStack>
       </Container>
     </Box>
