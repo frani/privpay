@@ -199,7 +199,7 @@ function Dashboard() {
   }
 
   return (
-    <Box minH="100vh" bg="gray.50">
+    <Box minH="100vh">
       <Box bg="white" shadow="sm" mb={8}>
         <Container maxW="7xl" py={4}>
           <HStack justify="space-between">

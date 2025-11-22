@@ -36,7 +36,6 @@ function LandingPage() {
   return (
     <Box
       minH="100vh"
-      bgGradient="linear(to-br, blue.50, indigo.100)"
       display="flex"
       alignItems="center"
       justifyContent="center"
