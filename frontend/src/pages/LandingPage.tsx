@@ -1,6 +1,5 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
 import {
   Box,
   Button,
@@ -9,7 +8,9 @@ import {
   Text,
   Spinner,
   VStack,
+  Image,
 } from '@chakra-ui/react'
+import logo from '../assets/pp.png'
 
 function LandingPage() {
   const { ready, authenticated, login } = usePrivy()
@@ -43,11 +44,14 @@ function LandingPage() {
     >
       <Container maxW="4xl" textAlign="center">
         <VStack spacing={8}>
+          <Image src={logo} alt="PrivPay" height="80px" />
           <Heading as="h1" size="2xl" color="gray.900">
             Welcome to PrivPay
           </Heading>
           <Text fontSize="xl" color="gray.600">
-            Secure payment checkouts powered by blockchain technology
+            Easy for Merchants.
+            Simple for Customers.
+            Private for everyone.
           </Text>
           { !authenticated && (
           <Button

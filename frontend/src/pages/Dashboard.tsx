@@ -9,7 +9,6 @@ import {
   Container,
   Heading,
   Text,
-  Link,
   Spinner,
   VStack,
   HStack,
@@ -17,8 +16,10 @@ import {
   CardBody,
   Badge,
   useToast,
+  Image,
 } from '@chakra-ui/react'
 import CreateCheckoutModal from '../components/CreateCheckoutModal'
+import logo from '../assets/pp.png'
 
 interface Checkout {
   _id: string
@@ -180,9 +181,12 @@ function Dashboard() {
       <Box bg="white" shadow="sm" mb={8}>
         <Container maxW="7xl" py={4}>
           <HStack justify="space-between">
-            <Heading size="lg" color="gray.900" onClick={() => navigate("/")} cursor="pointer">
-              🗝️ PrivPay Dashboard
-            </Heading>
+            <HStack spacing={3} onClick={() => navigate("/")} cursor="pointer">
+              <Image src={logo} alt="PrivPay" height="40px" />
+              <Heading size="lg" color="gray.900">
+                PrivPay Dashboard
+              </Heading>
+            </HStack>
             <HStack spacing={4}>
               <Text fontSize="sm" color="gray.600">
                 {user?.email?.address || user?.wallet?.address}
