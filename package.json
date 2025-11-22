@@ -1,0 +1,17 @@
+{
+  "name": "priv-pay-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for PrivPay - Payment checkout system",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev & pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "build": "pnpm --filter frontend build && pnpm --filter backend build",
+    "install:all": "pnpm install"
+  },
+  "devDependencies": {
+    "pnpm": "^8.15.0"
+  }
+}
+

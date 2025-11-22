@@ -1,0 +1,33 @@
+{
+  "name": "automated-shield-service",
+  "version": "1.0.0",
+  "description": "Servicio automatizado para shield de tokens con capa intermedia de privacidad",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "ethers": "^6.9.0",
+    "@railgun-community/contracts": "^1.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  },
+  "keywords": [
+    "railgun",
+    "shield",
+    "privacy",
+    "polygon",
+    "blockchain",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
