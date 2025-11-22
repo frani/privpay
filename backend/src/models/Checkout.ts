@@ -6,6 +6,9 @@ export interface ICheckout extends Document {
   status: 'pending' | 'completed' | 'failed'
   userId: mongoose.Types.ObjectId
   transactionHash?: string
+  checkoutRailgunAddress?: string // Dirección 0zk única para este checkout
+  shieldTransactionHash?: string // Hash de la transacción de shield
+  privateTransferHash?: string // Hash de la transferencia privada
   createdAt: Date
   updatedAt: Date
 }
@@ -31,6 +34,15 @@ const CheckoutSchema = new Schema<ICheckout>(
       required: true,
     },
     transactionHash: {
+      type: String,
+    },
+    checkoutRailgunAddress: {
+      type: String,
+    },
+    shieldTransactionHash: {
+      type: String,
+    },
+    privateTransferHash: {
       type: String,
     },
   },
