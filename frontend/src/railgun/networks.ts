@@ -11,14 +11,10 @@ export type RailgunChainConfig = {
 const DEFAULT_RPC: Partial<Record<string, string>> = {
   Polygon: 'https://polygon-rpc.com',
   Ethereum: 'https://rpc.ankr.com/eth',
-  PolygonMumbai: 'https://rpc.ankr.com/polygon_mumbai',
 }
 
 const polygonRpc = import.meta.env.VITE_POLYGON_RPC_URL || DEFAULT_RPC['Polygon']
 const ethereumRpc = import.meta.env.VITE_ETHEREUM_RPC_URL || DEFAULT_RPC['Ethereum']
-const polygonMumbaiRpc =
-  import.meta.env.VITE_POLYGON_MUMBAI_RPC_URL || DEFAULT_RPC['PolygonMumbai']
-
 const SUPPORTED_NETWORKS: Record<number, RailgunChainConfig> = {
   137: {
     chainId: 137,
@@ -31,12 +27,6 @@ const SUPPORTED_NETWORKS: Record<number, RailgunChainConfig> = {
     railgunNetwork: 'Ethereum',
     rpcUrl: ethereumRpc || '',
     label: 'Ethereum',
-  },
-  80001: {
-    chainId: 80001,
-    railgunNetwork: 'PolygonMumbai',
-    rpcUrl: polygonMumbaiRpc || '',
-    label: 'Polygon Mumbai',
   },
 }
 

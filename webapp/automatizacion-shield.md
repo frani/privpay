@@ -397,7 +397,7 @@ exports.handler = async function(event) {
    - Implementar transferencias privadas
 
 5. **Testing en testnet**
-   - Probar en Mumbai (Polygon testnet)
+   - Probar en una red de pruebas de Polygon
    - Validar flujo completo
    - Optimizar gas costs
 

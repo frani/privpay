@@ -166,10 +166,10 @@ service.registerRecipient(
 npm test
 ```
 
-### Testing en Mumbai (Polygon Testnet)
+### Testing en testnet de Polygon
 
 1. Obtén MATIC de testnet desde un faucet
-2. Configura `POLYGON_RPC` a Mumbai
+2. Configura `POLYGON_RPC` a la red de pruebas que prefieras
 3. Usa direcciones de testnet
 4. Prueba el flujo completo
 
