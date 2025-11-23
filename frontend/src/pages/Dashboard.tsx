@@ -3,6 +3,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../lib/axios'
 import { fromStorageFormat } from '../utils.js'
+import { ethers } from 'ethers'
 import {
   Box,
   Button,
@@ -101,19 +102,42 @@ function Dashboard() {
   }
 
   const fetchBalance = async () => {
-    if (!user?.id) return
-
     try {
       setBalanceLoading(true)
-      const response = await apiClient.get('/api/user/balance', {
-        headers: {
-          Authorization: `Bearer ${user.id}`,
-        },
-      })
-      setBalance(response.data.balanceFormatted)
+
+      const ethereum = (window as any).ethereum
+      if (!ethereum) {
+        throw new Error('No wallet found')
+      }
+
+      // Ensure connection
+      await ethereum.request({ method: 'eth_requestAccounts' })
+
+      const provider = new ethers.BrowserProvider(ethereum)
+      const signer = await provider.getSigner()
+      const userAddress = await signer.getAddress()
+
+      const tokenAddress =
+        import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
+        '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
+
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          'function balanceOf(address account) external view returns (uint256)',
+          'function decimals() external view returns (uint8)',
+        ],
+        provider
+      )
+
+      const [rawBalance, decimals] = await Promise.all([
+        tokenContract.balanceOf(userAddress),
+        tokenContract.decimals(),
+      ])
+
+      setBalance(ethers.formatUnits(rawBalance, decimals))
     } catch (error) {
-      console.error('Error fetching balance:', error)
-      // Don't show toast for balance errors, just log it
+      console.error('Error fetching balance via wallet:', error)
     } finally {
       setBalanceLoading(false)
     }
