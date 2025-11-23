@@ -16,8 +16,10 @@ import {
   CardBody,
   Badge,
   useToast,
+  Image,
 } from '@chakra-ui/react'
 import CreateCheckoutModal from '../components/CreateCheckoutModal'
+import logo from '../assets/pp.png'
 
 interface Checkout {
   _id: string
@@ -34,11 +36,14 @@ function Dashboard() {
   const [checkouts, setCheckouts] = useState<Checkout[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [balance, setBalance] = useState<string | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(true)
 
   useEffect(() => {
     if (user?.id) {
       syncUserWithBackend()
       fetchCheckouts()
+      fetchBalance()
     }
   }, [user?.id])
 
@@ -100,6 +105,25 @@ function Dashboard() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchBalance = async () => {
+    if (!user?.id) return
+
+    try {
+      setBalanceLoading(true)
+      const response = await apiClient.get('/api/user/balance', {
+        headers: {
+          Authorization: `Bearer ${user.id}`,
+        },
+      })
+      setBalance(response.data.balanceFormatted)
+    } catch (error) {
+      console.error('Error fetching balance:', error)
+      // Don't show toast for balance errors, just log it
+    } finally {
+      setBalanceLoading(false)
     }
   }
 
@@ -175,22 +199,21 @@ function Dashboard() {
   }
 
   return (
-    <Box minH="100vh" bg="gray.50">
+    <Box minH="100vh">
       <Box bg="white" shadow="sm" mb={8}>
         <Container maxW="7xl" py={4}>
           <HStack justify="space-between">
-            <Heading size="lg" color="gray.900">
-              🗝️ PrivPay Dashboard
-            </Heading>
+            <HStack spacing={3} onClick={() => navigate("/")} cursor="pointer">
+              <Image src={logo} alt="PrivPay" height="40px" />
+              <Heading size="lg" color="gray.900">
+                PrivPay Dashboard
+              </Heading>
+            </HStack>
             <HStack spacing={4}>
               <Text fontSize="sm" color="gray.600">
                 {user?.email?.address || user?.wallet?.address}
               </Text>
-              <Button
-                onClick={handleLogout}
-                colorScheme="red"
-                size="sm"
-              >
+              <Button onClick={handleLogout} colorScheme="red" size="sm">
                 Logout
               </Button>
             </HStack>
@@ -199,6 +222,35 @@ function Dashboard() {
       </Box>
 
       <Container maxW="7xl" py={8}>
+        {/* Merchant Balance Panel */}
+        <Card mb={6} bg="blue.50" borderColor="blue.200" borderWidth="1px">
+          <CardBody>
+            <HStack justify="space-between" align="center">
+              <VStack align="start" spacing={1}>
+                <Text fontSize="sm" color="gray.600" fontWeight="medium">
+                  Your Balance
+                </Text>
+                {balanceLoading ? (
+                  <Spinner size="sm" color="blue.500" />
+                ) : (
+                  <Text fontSize="3xl" fontWeight="bold" color="blue.600">
+                    ${balance !== null ? parseFloat(balance).toFixed(2) : '0.00'} USDC
+                  </Text>
+                )}
+              </VStack>
+              <Button
+                onClick={fetchBalance}
+                size="sm"
+                variant="outline"
+                colorScheme="blue"
+                isLoading={balanceLoading}
+              >
+                Refresh
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
+
         <HStack justify="space-between" mb={6}>
           <Heading size="xl" color="gray.900">
             Your Checkouts
@@ -213,7 +265,12 @@ function Dashboard() {
         </HStack>
 
         {loading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" py={12}>
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            py={12}
+          >
             <Spinner size="xl" color="blue.500" />
           </Box>
         ) : checkouts.length === 0 ? (
@@ -227,7 +284,11 @@ function Dashboard() {
         ) : (
           <VStack spacing={4} align="stretch">
             {checkouts.map((checkout) => (
-              <Card key={checkout._id} _hover={{ shadow: 'md' }} transition="all 0.2s">
+              <Card
+                key={checkout._id}
+                _hover={{ shadow: "md" }}
+                transition="all 0.2s"
+              >
                 <CardBody>
                   <HStack justify="space-between" align="start">
                     <VStack align="start" spacing={2}>
@@ -238,7 +299,8 @@ function Dashboard() {
                         ${fromStorageFormat(checkout.amount)}
                       </Text>
                       <Text fontSize="sm" color="gray.500">
-                        Created: {new Date(checkout.createdAt).toLocaleDateString()}
+                        Created:{" "}
+                        {new Date(checkout.createdAt).toLocaleDateString()}
                       </Text>
                       <Badge colorScheme={getStatusColor(checkout.status)}>
                         {checkout.status}
@@ -266,7 +328,7 @@ function Dashboard() {
         />
       )}
     </Box>
-  )
+  );
 }
 
 export default Dashboard

@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express'
+import { ethers } from 'ethers'
 import User from '../models/User.js'
 
 const router = express.Router()
@@ -85,6 +86,58 @@ router.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'User already exists' })
     }
     res.status(500).json({ message: 'Internal server error' })
+  }
+})
+
+// GET /user/balance - Get merchant USDC balance
+router.get('/user/balance', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Authorization header required' })
+    }
+
+    const privyId = authHeader.replace('Bearer ', '')
+    const user = await User.findOne({ privyId })
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    if (!user.walletAddress) {
+      return res.status(400).json({ message: 'User wallet address not found' })
+    }
+
+    // Get USDC contract address from environment
+    const tokenAddress = process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    const rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com'
+
+    // Create provider and contract
+    const provider = new ethers.JsonRpcProvider(rpcUrl)
+    const tokenABI = [
+      'function balanceOf(address account) external view returns (uint256)',
+      'function decimals() external view returns (uint8)'
+    ]
+    const tokenContract = new ethers.Contract(tokenAddress, tokenABI, provider)
+
+    // Get balance
+    const balance = await tokenContract.balanceOf(user.walletAddress)
+    const decimals = await tokenContract.decimals()
+
+    // Convert to human-readable format (USDC has 6 decimals)
+    const balanceFormatted = ethers.formatUnits(balance, decimals)
+
+    res.json({
+      balance: balance.toString(), // Raw balance in smallest unit
+      balanceFormatted: balanceFormatted, // Human-readable balance
+      walletAddress: user.walletAddress,
+    })
+  } catch (error: any) {
+    console.error('Error fetching balance:', error)
+    res.status(500).json({ 
+      message: 'Failed to fetch balance',
+      error: error.message 
+    })
   }
 })
 
