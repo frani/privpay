@@ -93,7 +93,7 @@ const RAILGUN_ABI = [
 
 function CheckoutPage() {
   const { id } = useParams<{ id: string }>();
-  const { ready, authenticated, login } = usePrivy();
+  const { ready, authenticated, login, user: privyUser } = usePrivy();
   const toast = useToast();
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,12 +105,19 @@ function CheckoutPage() {
   const [needsApproval, setNeedsApproval] = useState(false);
   const [checkingAllowance, setCheckingAllowance] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [userBalance, setUserBalance] = useState<string | null>(null);
+  const [userBalanceLoading, setUserBalanceLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchCheckout();
     }
   }, [id, paymentHash]);
+
+  useEffect(() => {
+    fetchUserBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, authenticated, privyUser?.id]);
 
   const fetchCheckout = async () => {
     try {
@@ -211,6 +218,22 @@ function CheckoutPage() {
       shieldTxRequest,
       totalRequired,
     };
+  };
+
+  const fetchUserBalance = async () => {
+    if (!ready || !authenticated || !privyUser?.id) return;
+    try {
+      setUserBalanceLoading(true);
+      const res = await apiClient.get("/api/user/balance", {
+        headers: { Authorization: `Bearer ${privyUser.id}` },
+      });
+      setUserBalance(res.data.balanceFormatted || res.data.balance);
+    } catch (err) {
+      console.error("Error fetching user balance", err);
+      setUserBalance(null);
+    } finally {
+      setUserBalanceLoading(false);
+    }
   };
 
   const verifyAllowance = async (ctx: ShieldContext) => {
@@ -587,17 +610,28 @@ function CheckoutPage() {
                       </Badge>
                     </Box>
                     <Box>
-                      <Text fontSize="sm" color="gray.600" mb={1}>
-                        Recipient
+                      <Text
+                        fontSize="sm"
+                        color="gray.600"
+                        mb={1}
+                        fontWeight="bold"
+                      >
+                        Recipient: (Railgun private address)
                       </Text>
                       <Code
                         fontSize="xs"
                         p={2}
                         borderRadius="md"
                         display="block"
+                        bg="purple.50"
+                        color="purple.700"
                       >
                         {paymentInstructions.payTo}
                       </Code>
+                      <Text fontSize="xs" color="gray.600" mt={2}>
+                        Note: send via the shield flow (Pay Now); MetaMask
+                        cannot transfer directly to 0zk addresses.
+                      </Text>
                     </Box>
                   </VStack>
                 </Box>
@@ -679,6 +713,16 @@ function CheckoutPage() {
                   {checkout.name}
                 </Heading>
                 <Text color="gray.500">Payment Checkout</Text>
+                {ready && authenticated && (
+                  <Text fontSize="sm" color="gray.600">
+                    Balance:{" "}
+                    {userBalanceLoading
+                      ? "…"
+                      : userBalance
+                      ? `${userBalance} USDC`
+                      : "Unavailable"}
+                  </Text>
+                )}
               </VStack>
 
               <Box bg="gray.50" borderRadius="lg" p={6}>
@@ -702,7 +746,7 @@ function CheckoutPage() {
                         mb={1}
                         fontWeight="bold"
                       >
-                        🔐 Private Payment Address (0zk)
+                        🔐 Recipient: Railgun private address (0zk)
                       </Text>
                       <Code
                         fontSize="xs"
