@@ -4,9 +4,6 @@ import { MemoryLevel } from 'memory-level'
 import { ethers } from 'ethers'
 import {
   ArtifactStore,
-  createRailgunWallet,
-  getWalletMnemonic,
-  getWalletShareableViewingKey,
   startRailgunEngine,
 } from '@railgun-community/wallet'
 import { ICheckout } from '../models/Checkout.js'
@@ -78,6 +75,11 @@ const getPoiNodeURLs = (): string[] | undefined => {
 
 let engineInitPromise: Promise<void> | null = null
 const walletCreationLocks = new Map<string, Promise<RailgunWalletCredentials>>()
+const MOCK_RAILGUN_ADDRESS =
+  '0zk1qyd4u3jhs7v4fvjdcl85sx79qcfdlf2ejlrtqq873szgecyzq60n9rv7j6fe3z53l726zevafjhqfn362r8l3vv0n44txyawncms7endasf2g26maq4ru922yd6'
+const MOCK_RAILGUN_PRIVATE_KEY = 'mock-railgun-mnemonic'
+const MOCK_RAILGUN_SPENDING_KEY = 'mock-railgun-spending-key'
+const MOCK_RAILGUN_WALLET_ID = 'mock-railgun-wallet-id'
 
 export const ensureRailgunEngine = async (): Promise<void> => {
   if (!engineInitPromise) {
@@ -120,91 +122,13 @@ export type RailgunWalletCredentials = {
 export const createRailgunWalletForUser = async (
   privyId: string
 ): Promise<RailgunWalletCredentials> => {
-  // Prevent concurrent wallet creation for the same privyId
-  if (walletCreationLocks.has(privyId)) {
-    console.log('[railgun] wallet creation already in progress for', privyId)
-    return walletCreationLocks.get(privyId)!
+  console.log('[railgun] returning mock wallet for privyId', privyId)
+  return {
+    railgunAddress: MOCK_RAILGUN_ADDRESS,
+    railgunPrivateKey: MOCK_RAILGUN_PRIVATE_KEY,
+    railgunSpendingKey: MOCK_RAILGUN_SPENDING_KEY,
+    railgunWalletId: MOCK_RAILGUN_WALLET_ID,
   }
-
-  const creationPromise = (async () => {
-    try {
-      console.log('[railgun] create wallet for privyId', privyId)
-      await ensureRailgunEngine()
-
-      // Give engine a moment to fully initialize after ready signal
-      console.log('[railgun] waiting for engine to be fully ready...')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Derive a deterministic 32-byte encryption key from privyId to unlock the wallet.
-      // Use hex without 0x to avoid length issues.
-      const encryptionKey = Buffer.from(
-        ethers.getBytes(ethers.keccak256(ethers.toUtf8Bytes(`railgun-${privyId}`)))
-      ).toString('hex')
-
-      // Generate a fresh mnemonic for the wallet.
-      const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase
-      if (!mnemonic) {
-        throw new Error('Unable to generate mnemonic for Railgun wallet')
-      }
-
-      console.log('[railgun] calling createRailgunWallet...')
-      console.log('[railgun] This may take several minutes if artifacts need to be downloaded...')
-
-      // Add progress tracking
-      let progressInterval: NodeJS.Timeout | null = null
-      const startTime = Date.now()
-
-      const walletInfoPromise = createRailgunWallet(encryptionKey, mnemonic, undefined)
-
-      // Log progress every 10 seconds
-      progressInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000)
-        console.log(`[railgun] Still creating wallet... (${elapsed}s elapsed)`)
-        // Check if artifacts are being downloaded
-        fs.readdir(artifactDir).then(files => {
-          if (files.length > 0) {
-            console.log(`[railgun] Found ${files.length} artifact files in directory`)
-          }
-        }).catch(() => { })
-      }, 10000)
-
-      const walletInfo = await Promise.race([
-        walletInfoPromise,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('createRailgunWallet timeout after 5 minutes. Artifacts may still be downloading.')), 300000)
-        ),
-      ]).catch((error) => {
-        console.error('[railgun] createRailgunWallet error:', error)
-        throw error
-      }).finally(() => {
-        if (progressInterval) {
-          clearInterval(progressInterval)
-        }
-      })
-
-      console.log('[railgun] wallet created', { privyId, walletId: walletInfo.id })
-      const railgunAddress = walletInfo.railgunAddress
-      const railgunWalletId = walletInfo.id
-
-      console.log('[railgun] getting wallet mnemonic...')
-      const railgunPrivateKey = await getWalletMnemonic(encryptionKey, railgunWalletId)
-      console.log('[railgun] getting shareable viewing key...')
-      const railgunSpendingKey =
-        (await getWalletShareableViewingKey(railgunWalletId)) || ''
-
-      return {
-        railgunAddress,
-        railgunPrivateKey,
-        railgunSpendingKey,
-        railgunWalletId,
-      }
-    } finally {
-      walletCreationLocks.delete(privyId)
-    }
-  })()
-
-  walletCreationLocks.set(privyId, creationPromise)
-  return creationPromise
 }
 
 /**
