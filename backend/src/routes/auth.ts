@@ -22,6 +22,17 @@ router.post('/signin', async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found. Please sign up first.' })
     }
 
+    console.log("user :", {
+      user: {
+        id: user._id,
+        privyId: user.privyId,
+        name: user.name,
+        email: user.email,
+        walletAddress: user.walletAddress,
+        railgunAddress: user.railgunAddress,
+      },
+    });
+
     res.json({
       message: 'Sign in successful',
       user: {
@@ -153,9 +164,9 @@ router.get('/user/balance', async (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error('Error fetching balance:', error)
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Failed to fetch balance',
-      error: error.message 
+      error: error.message
     })
   }
 })

@@ -1,9 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../lib/axios";
 import { fromStorageFormat } from "../utils.js";
-import { createPublicClient, custom, formatUnits } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  defineChain,
+  formatUnits,
+  erc20Abi,
+  type Chain,
+} from "viem";
 import { polygon } from "viem/chains";
 import {
   Box,
@@ -41,15 +49,7 @@ function Dashboard() {
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
 
-  useEffect(() => {
-    if (user?.id) {
-      syncUserWithBackend();
-      fetchCheckouts();
-      fetchBalance();
-    }
-  }, [user?.id]);
-
-  const syncUserWithBackend = async () => {
+  const syncUserWithBackend = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -76,9 +76,9 @@ function Dashboard() {
         }
       }
     }
-  };
+  }, [toast, user]);
 
-  const fetchCheckouts = async () => {
+  const fetchCheckouts = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -101,9 +101,9 @@ function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, user?.id]);
 
-  const fetchBalance = async () => {
+  const fetchBalance = useCallback(async () => {
     if (!user?.id || !user.wallet?.address) {
       setBalanceLoading(false);
       return;
@@ -120,42 +120,120 @@ function Dashboard() {
         return;
       }
 
-      const [userAddress] = (await ethereum.request({
-        method: "eth_requestAccounts",
-      })) as string[];
+      const expectedChainId = Number(
+        import.meta.env.VITE_CHAIN_ID || polygon.id
+      );
+      const rpcUrl =
+        import.meta.env.VITE_POLYGON_RPC_URL || polygon.rpcUrls.default.http[0];
+      const blockExplorerUrl =
+        import.meta.env.VITE_BLOCK_EXPLORER_URL ||
+        polygon.blockExplorers?.default.url ||
+        "https://polygonscan.com";
+      const chainName = import.meta.env.VITE_CHAIN_NAME || "Polygon";
+      const currencyName = import.meta.env.VITE_CHAIN_CURRENCY_NAME || "MATIC";
+      const currencySymbol =
+        import.meta.env.VITE_CHAIN_CURRENCY_SYMBOL || "MATIC";
+
+      const customChain: Chain = defineChain({
+        id: expectedChainId,
+        name: chainName,
+        nativeCurrency: {
+          name: currencyName,
+          symbol: currencySymbol,
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+        blockExplorers: {
+          default: {
+            name: chainName,
+            url: blockExplorerUrl,
+          },
+        },
+      });
+
+      const targetChain: Chain =
+        expectedChainId === polygon.id ? polygon : customChain;
+
+      const walletClient = createWalletClient({
+        chain: targetChain,
+        transport: custom(ethereum),
+      });
+
+      const [userAddress] = await walletClient.requestAddresses();
+      if (!userAddress) {
+        setBalance(null);
+        setBalanceLoading(false);
+        return;
+      }
+      const chainId = await walletClient.getChainId();
+      if (chainId !== expectedChainId) {
+        try {
+          await walletClient.switchChain({ id: expectedChainId });
+          toast({
+            title: "Network Switched",
+            description: `Wallet switched to chain ID ${expectedChainId}.`,
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+        } catch (switchError: any) {
+          if (switchError?.code === 4902) {
+            try {
+              await walletClient.addChain({ chain: targetChain });
+              toast({
+                title: "Network Added",
+                description: `${targetChain.name} network added to your wallet.`,
+                status: "success",
+                duration: 3000,
+                isClosable: true,
+              });
+            } catch (addError) {
+              console.error("Failed to add target network", addError);
+              toast({
+                title: "Wrong Network",
+                description: `Switch your wallet to chain ${expectedChainId} to view balance.`,
+                status: "warning",
+                duration: 5000,
+                isClosable: true,
+              });
+              setBalance(null);
+              setBalanceLoading(false);
+              return;
+            }
+          } else {
+            console.error("User rejected network switch", switchError);
+            toast({
+              title: "Wrong Network",
+              description: `Switch your wallet to chain ${expectedChainId} to view balance.`,
+              status: "warning",
+              duration: 5000,
+              isClosable: true,
+            });
+            setBalance(null);
+            setBalanceLoading(false);
+            return;
+          }
+        }
+      }
 
       const tokenAddress =
         (import.meta.env.VITE_USDC_CONTRACT_ADDRESS as `0x${string}`) ||
         ("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const);
 
       const client = createPublicClient({
-        chain: polygon,
+        chain: targetChain,
         transport: custom(ethereum),
       });
-
-      const erc20Abi = [
-        {
-          name: "balanceOf",
-          type: "function",
-          stateMutability: "view",
-          inputs: [{ name: "account", type: "address" }],
-          outputs: [{ name: "", type: "uint256" }],
-        },
-        {
-          name: "decimals",
-          type: "function",
-          stateMutability: "view",
-          inputs: [],
-          outputs: [{ name: "", type: "uint8" }],
-        },
-      ] as const;
 
       const [rawBalance, decimals] = await Promise.all([
         client.readContract({
           address: tokenAddress,
           abi: erc20Abi,
           functionName: "balanceOf",
-          args: [userAddress as `0x${string}`],
+          args: [userAddress],
         }),
         client.readContract({
           address: tokenAddress,
@@ -163,6 +241,7 @@ function Dashboard() {
           functionName: "decimals",
         }),
       ]);
+      console.log("rawBalance :", rawBalance);
 
       setBalance(formatUnits(rawBalance as bigint, decimals as number));
     } catch (error) {
@@ -170,7 +249,14 @@ function Dashboard() {
     } finally {
       setBalanceLoading(false);
     }
-  };
+  }, [toast, user?.id, user?.wallet?.address]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    syncUserWithBackend();
+    fetchCheckouts();
+    fetchBalance();
+  }, [user?.id, syncUserWithBackend, fetchCheckouts, fetchBalance]);
 
   const handleCreateCheckout = async (name: string, amount: number) => {
     if (!user?.id) {
