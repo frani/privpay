@@ -1,4 +1,5 @@
-import { NetworkName } from '@railgun-community/shared-models'
+// Using string type instead of NetworkName to avoid type issues
+type NetworkName = string
 
 export type RailgunChainConfig = {
   chainId: number
@@ -7,33 +8,34 @@ export type RailgunChainConfig = {
   label: string
 }
 
-const DEFAULT_RPC: Partial<Record<NetworkName, string>> = {
-  [NetworkName.Polygon]: 'https://polygon-rpc.com',
-  [NetworkName.Ethereum]: 'https://rpc.ankr.com/eth',
+const DEFAULT_RPC: Partial<Record<string, string>> = {
+  Polygon: 'https://polygon-rpc.com',
+  Ethereum: 'https://rpc.ankr.com/eth',
+  PolygonMumbai: 'https://rpc.ankr.com/polygon_mumbai',
 }
 
-const polygonRpc = import.meta.env.VITE_POLYGON_RPC_URL || DEFAULT_RPC[NetworkName.Polygon]
-const ethereumRpc = import.meta.env.VITE_ETHEREUM_RPC_URL || DEFAULT_RPC[NetworkName.Ethereum]
+const polygonRpc = import.meta.env.VITE_POLYGON_RPC_URL || DEFAULT_RPC['Polygon']
+const ethereumRpc = import.meta.env.VITE_ETHEREUM_RPC_URL || DEFAULT_RPC['Ethereum']
 const polygonMumbaiRpc =
-  import.meta.env.VITE_POLYGON_MUMBAI_RPC_URL || DEFAULT_RPC[NetworkName.PolygonMumbai]
+  import.meta.env.VITE_POLYGON_MUMBAI_RPC_URL || DEFAULT_RPC['PolygonMumbai']
 
 const SUPPORTED_NETWORKS: Record<number, RailgunChainConfig> = {
   137: {
     chainId: 137,
-    railgunNetwork: NetworkName.Polygon,
-    rpcUrl: polygonRpc,
+    railgunNetwork: 'Polygon',
+    rpcUrl: polygonRpc || '',
     label: 'Polygon',
   },
   1: {
     chainId: 1,
-    railgunNetwork: NetworkName.Ethereum,
-    rpcUrl: ethereumRpc,
+    railgunNetwork: 'Ethereum',
+    rpcUrl: ethereumRpc || '',
     label: 'Ethereum',
   },
   80001: {
     chainId: 80001,
-    railgunNetwork: NetworkName.PolygonMumbai,
-    rpcUrl: polygonMumbaiRpc,
+    railgunNetwork: 'PolygonMumbai',
+    rpcUrl: polygonMumbaiRpc || '',
     label: 'Polygon Mumbai',
   },
 }

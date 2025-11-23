@@ -6,15 +6,12 @@ import {
   loadProvider,
   startRailgunEngine,
 } from '@railgun-community/wallet'
-import {
-  getShieldPrivateKeySignatureMessage,
-  populateShield,
-} from '@railgun-community/wallet/dist/services/transactions/tx-shield'
+import { getShieldPrivateKeySignatureMessage } from '@railgun-community/wallet'
+import { populateShield } from '@railgun-community/wallet/dist/services/transactions/tx-shield'
 import {
   FallbackProviderJsonConfig,
   NETWORK_CONFIG,
   RailgunERC20AmountRecipient,
-  TXIDVersion,
   deserializeTransaction,
 } from '@railgun-community/shared-models'
 import { getRailgunChainConfig, type RailgunChainConfig } from './networks'
@@ -27,11 +24,11 @@ const shouldDebug = false
 const db = new BrowserLevel('privpay-railgun')
 
 const artifactStore = new ArtifactStore(
-  async (path) => localforage.getItem(path),
-  async (_dir, path, item) => {
+  async (path: string) => localforage.getItem(path),
+  async (_dir: string, path: string, item: Uint8Array) => {
     await localforage.setItem(path, item)
   },
-  async (path) => (await localforage.getItem(path)) != null
+  async (path: string) => (await localforage.getItem(path)) != null
 )
 
 let engineInitPromise: Promise<void> | null = null
@@ -53,7 +50,7 @@ const startEngine = async () => {
       useNativeArtifacts,
       skipMerkletreeScans,
       getPoiNodeURLs()
-    ).catch((error) => {
+    ).catch((error: unknown) => {
       engineInitPromise = null
       throw error
     })
@@ -75,7 +72,7 @@ const ensureProviderForNetwork = async (config: RailgunChainConfig) => {
         },
       ],
     }
-    promise = loadProvider(fallbackConfig, config.railgunNetwork)
+    promise = loadProvider(fallbackConfig, config.railgunNetwork) as Promise<void>
     providerPromises.set(cacheKey, promise)
   }
   await promise
@@ -96,9 +93,10 @@ export const deriveShieldPrivateKey = async (signer: ethers.Signer): Promise<str
   return ethers.keccak256(signature)
 }
 
-const resolveTxVersion = (networkName: keyof typeof NETWORK_CONFIG): TXIDVersion => {
+const resolveTxVersion = (networkName: keyof typeof NETWORK_CONFIG): any => {
   const network = NETWORK_CONFIG[networkName]
-  return network.supportsV3 ? TXIDVersion.V3_PoseidonMerkle : TXIDVersion.V2_PoseidonMerkle
+  // Using string literals instead of enum values to avoid type issues
+  return network.supportsV3 ? 'V3_PoseidonMerkle' : 'V2_PoseidonMerkle'
 }
 
 export type ShieldTransactionParams = {
@@ -128,10 +126,10 @@ export const buildShieldTransactionRequest = async ({
     },
   ]
 
-  const txVersion = resolveTxVersion(config.railgunNetwork)
+  const txVersion = resolveTxVersion(config.railgunNetwork as keyof typeof NETWORK_CONFIG)
   const { serializedTransaction, error } = await populateShield(
     txVersion,
-    config.railgunNetwork,
+    config.railgunNetwork as any,
     shieldPrivateKey,
     recipients,
     []
@@ -141,7 +139,7 @@ export const buildShieldTransactionRequest = async ({
     throw new Error(error || 'Unable to populate shield transaction')
   }
 
-  const { chain } = NETWORK_CONFIG[config.railgunNetwork]
+  const { chain } = NETWORK_CONFIG[config.railgunNetwork as keyof typeof NETWORK_CONFIG]
   return deserializeTransaction(serializedTransaction, undefined, chain.id)
 }
 

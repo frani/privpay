@@ -4,11 +4,6 @@ import { usePrivy } from '@privy-io/react-auth'
 import { ethers } from 'ethers'
 import apiClient from '../lib/axios'
 import { fromStorageFormat } from '../utils.js'
-import {
-  ensureRailgunReady,
-  deriveShieldPrivateKey,
-  buildShieldTransactionRequest,
-} from '../railgun/shield'
 
 // Type for ethereum provider (using any to avoid conflicts with existing declarations)
 import {
@@ -67,7 +62,59 @@ interface X402Response {
 
 const ERC20_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
+  'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external',
+  'function DOMAIN_SEPARATOR() external view returns (bytes32)',
+  'function nonces(address owner) external view returns (uint256)',
 ]
+
+const RAILGUN_ABI = [
+  'function shield(bytes32[2] recipient, address token, uint256 amount) external',
+  'function getShieldFee(uint256 amount) external view returns (uint256)',
+]
+
+// Helper function to sign permit (EIP-2612)
+async function signPermit(
+  signer: ethers.Signer,
+  tokenContract: ethers.Contract,
+  owner: string,
+  spender: string,
+  value: bigint,
+  deadline: bigint
+): Promise<{ v: number; r: string; s: string }> {
+  const domainSeparator = await tokenContract.DOMAIN_SEPARATOR()
+  const nonce = await tokenContract.nonces(owner)
+
+  // EIP-712 permit type hash
+  const PERMIT_TYPEHASH = ethers.keccak256(
+    ethers.toUtf8Bytes('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)')
+  )
+
+  // Construir struct hash
+  const structHash = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
+      [PERMIT_TYPEHASH, owner, spender, value, nonce, deadline]
+    )
+  )
+
+  // Construir message hash (EIP-712)
+  const messageHash = ethers.keccak256(
+    ethers.AbiCoder.defaultAbiCoder().encode(
+      ['bytes1', 'bytes1', 'bytes32', 'bytes32'],
+      ['0x19', '0x01', domainSeparator, structHash]
+    )
+  )
+
+  // Firmar el mensaje
+  const signature = await signer.signMessage(ethers.getBytes(messageHash))
+  const sig = ethers.Signature.from(signature)
+
+  return {
+    v: sig.v,
+    r: sig.r,
+    s: sig.s,
+  }
+}
 
 function CheckoutPage() {
   const { id } = useParams<{ id: string }>()
@@ -208,6 +255,9 @@ function CheckoutPage() {
           
           // For now, execute permit on-chain
           // TODO: Check if Railgun contract has shieldWithPermit() function
+          if (!permitSignature) {
+            throw new Error('Permit signature is null')
+          }
           const deadlineForPermit = BigInt(Math.floor(Date.now() / 1000) + 3600)
           const permitTx = await usdcContract.permit(
             userAddress,
