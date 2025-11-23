@@ -1,5 +1,4 @@
-// Using string type instead of NetworkName to avoid type issues
-type NetworkName = string
+import { NetworkName } from '@railgun-community/shared-models'
 
 export type RailgunChainConfig = {
   chainId: number
@@ -18,13 +17,13 @@ const ethereumRpc = import.meta.env.VITE_ETHEREUM_RPC_URL || DEFAULT_RPC['Ethere
 const SUPPORTED_NETWORKS: Record<number, RailgunChainConfig> = {
   137: {
     chainId: 137,
-    railgunNetwork: 'Polygon',
+    railgunNetwork: NetworkName.Polygon,
     rpcUrl: polygonRpc || '',
     label: 'Polygon',
   },
   1: {
     chainId: 1,
-    railgunNetwork: 'Ethereum',
+    railgunNetwork: NetworkName.Ethereum,
     rpcUrl: ethereumRpc || '',
     label: 'Ethereum',
   },
