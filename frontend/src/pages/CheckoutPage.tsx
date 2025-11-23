@@ -65,6 +65,18 @@ interface X402Response {
   error: string;
 }
 
+type ShieldContext = {
+  signer: ethers.Signer;
+  userAddress: string;
+  chainId: number;
+  config: any;
+  tokenAddress: string;
+  railgunContractAddress: string;
+  usdcContract: ethers.Contract;
+  shieldTxRequest: ethers.TransactionRequest;
+  totalRequired: bigint;
+};
+
 const ERC20_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
   "function allowance(address owner, address spender) external view returns (uint256)",
@@ -90,6 +102,9 @@ function CheckoutPage() {
   const [paymentInstructions, setPaymentInstructions] =
     useState<X402PaymentInstruction | null>(null);
   const [paymentHash, setPaymentHash] = useState<string | null>(null);
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [checkingAllowance, setCheckingAllowance] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -130,6 +145,162 @@ function CheckoutPage() {
     }
   };
 
+  const getShieldContext = async (): Promise<ShieldContext> => {
+    if (!checkout?.checkoutRailgunAddress) {
+      throw new Error("Checkout not loaded");
+    }
+
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) {
+      throw new Error(
+        "No Ethereum wallet found. Please install MetaMask or connect a wallet."
+      );
+    }
+
+    await ethereum.request({ method: "eth_requestAccounts" });
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
+    const network = await signer.provider?.getNetwork();
+    const chainId = Number(network?.chainId || 137n);
+
+    const tokenAddress =
+      import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
+      "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+    const amount = BigInt(checkout.amount);
+
+    const config = await ensureRailgunReady(chainId);
+    const shieldPrivateKey = await deriveShieldPrivateKey(signer);
+    const shieldTxRequest = await buildShieldTransactionRequest({
+      config,
+      shieldPrivateKey,
+      tokenAddress,
+      amount,
+      recipientAddress: checkout.checkoutRailgunAddress,
+    });
+
+    const railgunContractAddress = await Promise.resolve(shieldTxRequest.to);
+    if (!railgunContractAddress) {
+      throw new Error("Unable to resolve Railgun contract address");
+    }
+
+    const usdcContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+    const railgunContract = new ethers.Contract(
+      railgunContractAddress,
+      RAILGUN_ABI,
+      signer
+    );
+
+    const shieldFee = await railgunContract.getShieldFee(amount);
+    const totalRequired = amount + shieldFee;
+
+    const balance = await usdcContract.balanceOf(userAddress);
+    if (balance < totalRequired) {
+      throw new Error("Insufficient USDC balance (amount + fee)");
+    }
+
+    return {
+      signer,
+      userAddress,
+      chainId,
+      config,
+      tokenAddress,
+      railgunContractAddress,
+      usdcContract,
+      shieldTxRequest,
+      totalRequired,
+    };
+  };
+
+  const verifyAllowance = async (ctx: ShieldContext) => {
+    setCheckingAllowance(true);
+    try {
+      const allowance = await ctx.usdcContract.allowance(
+        ctx.userAddress,
+        ctx.railgunContractAddress
+      );
+      const needs = allowance < ctx.totalRequired;
+      setNeedsApproval(needs);
+      return !needs;
+    } finally {
+      setCheckingAllowance(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!checkout?.checkoutRailgunAddress) return;
+
+    if (!ready || !authenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please connect your wallet to continue",
+        status: "warning",
+        duration: 5000,
+        isClosable: true,
+      });
+      await login();
+      return;
+    }
+
+    try {
+      setApproving(true);
+      const ctx = await getShieldContext();
+      const hasAllowance = await verifyAllowance(ctx);
+
+      if (hasAllowance) {
+        toast({
+          title: "Already Approved",
+          description: "USDC is already approved for Railgun",
+          status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      toast({
+        title: "Approval Required",
+        description: "Please confirm the approval transaction in your wallet",
+        status: "info",
+        duration: 4000,
+        isClosable: true,
+      });
+
+      const approveTx = await ctx.usdcContract.approve(
+        ctx.railgunContractAddress,
+        ctx.totalRequired
+      );
+      await approveTx.wait();
+      setNeedsApproval(false);
+
+      toast({
+        title: "Approval Successful",
+        description: "USDC approved for Railgun shield",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error: any) {
+      console.error("Error approving USDC:", error);
+      let message = "Approval failed. Please try again.";
+      if (error?.code === 4001) {
+        message = "Approval transaction was rejected";
+      } else if (error?.message) {
+        message = error.message;
+      }
+      toast({
+        title: "Approval Error",
+        description: message,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const handleShieldPayment = async () => {
     if (!checkout?.checkoutRailgunAddress) return;
 
@@ -148,80 +319,18 @@ function CheckoutPage() {
     try {
       setProcessing(true);
 
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) {
-        throw new Error(
-          "No Ethereum wallet found. Please install MetaMask or connect a wallet."
-        );
-      }
+      const ctx = await getShieldContext();
+      const hasAllowance = await verifyAllowance(ctx);
 
-      await ethereum.request({ method: "eth_requestAccounts" });
-
-      const provider = new ethers.BrowserProvider(ethereum);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      const network = await signer.provider?.getNetwork();
-      const chainId = Number(network?.chainId || 137n);
-
-      const tokenAddress =
-        import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
-        "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-      const amount = BigInt(checkout.amount);
-
-      const config = await ensureRailgunReady(chainId);
-      const shieldPrivateKey = await deriveShieldPrivateKey(signer);
-      const shieldTxRequest = await buildShieldTransactionRequest({
-        config,
-        shieldPrivateKey,
-        tokenAddress,
-        amount,
-        recipientAddress: checkout.checkoutRailgunAddress,
-      });
-
-      const railgunContractAddress = await Promise.resolve(shieldTxRequest.to);
-      if (!railgunContractAddress) {
-        throw new Error("Unable to resolve Railgun contract address");
-      }
-
-      const usdcContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-      const railgunContract = new ethers.Contract(
-        railgunContractAddress,
-        RAILGUN_ABI,
-        signer
-      );
-
-      const shieldFee = await railgunContract.getShieldFee(amount);
-      const totalRequired = amount + shieldFee;
-
-      const balance = await usdcContract.balanceOf(userAddress);
-      if (balance < totalRequired) {
-        throw new Error("Insufficient USDC balance (amount + fee)");
-      }
-
-      const allowance = await usdcContract.allowance(
-        userAddress,
-        railgunContractAddress
-      );
-      if (allowance < totalRequired) {
+      if (!hasAllowance) {
         toast({
           title: "Approval Needed",
-          description: "Please confirm the approval transaction in your wallet",
-          status: "info",
+          description: "Please approve USDC for Railgun before shielding",
+          status: "warning",
           duration: 4000,
           isClosable: true,
         });
-        const approveTx = await usdcContract.approve(
-          railgunContractAddress,
-          ethers.MaxUint256
-        );
-        await approveTx.wait();
-        toast({
-          title: "Approval Confirmed",
-          description: "USDC approved for Railgun shield contract",
-          status: "success",
-          duration: 3000,
-          isClosable: true,
-        });
+        return;
       }
 
       toast({
@@ -232,11 +341,11 @@ function CheckoutPage() {
         isClosable: true,
       });
 
-      const shieldTx = await signer.sendTransaction({
-        ...shieldTxRequest,
-        to: railgunContractAddress,
-        chainId: config.chainId,
-        from: userAddress,
+      const shieldTx = await ctx.signer.sendTransaction({
+        ...ctx.shieldTxRequest,
+        to: ctx.railgunContractAddress,
+        chainId: ctx.config.chainId,
+        from: ctx.userAddress,
       });
 
       toast({
@@ -255,7 +364,7 @@ function CheckoutPage() {
 
       await apiClient.post(`/api/checkouts/${checkout._id}/shield`, {
         transactionHash: txHash,
-        tokenAddress,
+        tokenAddress: ctx.tokenAddress,
       });
 
       toast({
@@ -699,6 +808,26 @@ function CheckoutPage() {
                       </Text>
                     </Box>
                   </Alert>
+                  {needsApproval && (
+                    <Alert status="warning" borderRadius="md">
+                      <AlertIcon />
+                      USDC approval is required before shielding.
+                    </Alert>
+                  )}
+                  <Button
+                    onClick={handleApprove}
+                    isLoading={approving || checkingAllowance}
+                    loadingText="Checking approval..."
+                    variant="outline"
+                    colorScheme="purple"
+                    size="lg"
+                    w="full"
+                    isDisabled={!ready || !authenticated}
+                  >
+                    {needsApproval
+                      ? "Approve USDC for Railgun"
+                      : "Check Approval / Approve"}
+                  </Button>
                   <Button
                     onClick={handleShieldPayment}
                     isLoading={processing}
@@ -706,7 +835,7 @@ function CheckoutPage() {
                     colorScheme="purple"
                     size="lg"
                     w="full"
-                    isDisabled={!ready || !authenticated}
+                    isDisabled={!ready || !authenticated || needsApproval}
                   >
                     {!ready || !authenticated
                       ? "Connect Wallet to Pay Privately"
