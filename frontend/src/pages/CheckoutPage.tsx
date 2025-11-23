@@ -4,6 +4,11 @@ import { usePrivy } from '@privy-io/react-auth'
 import { ethers } from 'ethers'
 import apiClient from '../lib/axios'
 import { fromStorageFormat } from '../utils.js'
+import {
+  ensureRailgunReady,
+  deriveShieldPrivateKey,
+  buildShieldTransactionRequest,
+} from '../railgun/shield'
 
 // Type for ethereum provider (using any to avoid conflicts with existing declarations)
 import {
@@ -60,71 +65,9 @@ interface X402Response {
   error: string
 }
 
-// USDC ERC20 ABI (minimal for transfer and shield)
 const ERC20_ABI = [
-  'function transfer(address to, uint256 amount) external returns (bool)',
-  'function approve(address spender, uint256 amount) external returns (bool)',
-  'function allowance(address owner, address spender) external view returns (uint256)',
-  'function decimals() external view returns (uint8)',
   'function balanceOf(address account) external view returns (uint256)',
-  // EIP-2612 permit functions
-  'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external',
-  'function nonces(address owner) external view returns (uint256)',
-  'function DOMAIN_SEPARATOR() external view returns (bytes32)',
 ]
-
-// Railgun Contract ABI (simplified)
-const RAILGUN_ABI = [
-  'function shield(bytes32[2] recipient, address token, uint256 amount) external',
-  'function getShieldFee(uint256 amount) external view returns (uint256)',
-]
-
-// EIP-2612 Permit helper function
-async function signPermit(
-  signer: ethers.Signer,
-  tokenContract: ethers.Contract,
-  owner: string,
-  spender: string,
-  value: bigint,
-  deadline: bigint
-): Promise<{ v: number; r: string; s: string }> {
-  // Get domain separator and nonce
-  const domainSeparator = await tokenContract.DOMAIN_SEPARATOR()
-  const nonce = await tokenContract.nonces(owner)
-
-  // EIP-712 permit type hash
-  const PERMIT_TYPEHASH = ethers.keccak256(
-    ethers.toUtf8Bytes('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)')
-  )
-
-  // Build the struct hash
-  const structHash = ethers.keccak256(
-    ethers.AbiCoder.defaultAbiCoder().encode(
-      ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
-      [PERMIT_TYPEHASH, owner, spender, value, nonce, deadline]
-    )
-  )
-
-  // Build the message hash (EIP-712)
-  const messageHash = ethers.keccak256(
-    ethers.AbiCoder.defaultAbiCoder().encode(
-      ['bytes1', 'bytes1', 'bytes32', 'bytes32'],
-      ['0x19', '0x01', domainSeparator, structHash]
-    )
-  )
-
-  // Sign using EIP-712 format
-  // Note: For MetaMask, we need to use the proper EIP-712 signing
-  // This is a simplified version - in production, use a library like @metamask/eth-sig-util
-  const signature = await signer.signMessage(ethers.getBytes(messageHash))
-  const sig = ethers.Signature.from(signature)
-
-  return {
-    v: sig.v,
-    r: sig.r,
-    s: sig.s,
-  }
-}
 
 function CheckoutPage() {
   const { id } = useParams<{ id: string }>()
