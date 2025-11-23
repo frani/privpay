@@ -20,6 +20,11 @@ function LandingPage() {
     login()
   }
 
+  // Auto-redirect once authenticated.
+  if (ready && authenticated) {
+    navigate('/dashboard')
+  }
+
   if (!ready) {
     return (
       <Box

@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express'
+import { ethers } from 'ethers'
 import User from '../models/User.js'
 import { createRailgunWalletForUser } from '../services/railgunService.js'
 
@@ -8,6 +9,8 @@ const router = express.Router()
 router.post('/signin', async (req: Request, res: Response) => {
   try {
     const { privyId } = req.body
+
+    console.log('Signin request payload', { privyId })
 
     if (!privyId) {
       return res.status(400).json({ message: 'Privy ID is required' })
@@ -40,6 +43,13 @@ router.post('/signin', async (req: Request, res: Response) => {
 router.post('/signup', async (req: Request, res: Response) => {
   try {
     const { privyId, email, walletAddress, name } = req.body
+
+    console.log('Signup request payload', {
+      privyId,
+      email,
+      walletAddress,
+      name,
+    })
 
     let { railgunPrivateKey, railgunAddress, railgunSpendingKey } = req.body
 

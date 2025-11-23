@@ -18,7 +18,8 @@ import { IUser } from '../models/User.js'
  * artifacts to disk under ./railgun-artifacts.
  */
 
-const walletSource = 'privpay-backend'
+// Wallet source must be alphanumeric only (no dashes or underscores).
+const walletSource = 'privpaybackend'
 const shouldDebug = false
 const useNativeArtifacts = false
 const skipMerkletreeScans = true
@@ -85,8 +86,11 @@ export const createRailgunWalletForUser = async (
 ): Promise<RailgunWalletCredentials> => {
   await ensureRailgunEngine()
 
-  // Derive a deterministic encryption key from privyId to unlock the wallet.
-  const encryptionKey = ethers.keccak256(ethers.toUtf8Bytes(`railgun-${privyId}`))
+  // Derive a deterministic 32-byte encryption key from privyId to unlock the wallet.
+  // Use hex without 0x to avoid length issues.
+  const encryptionKey = Buffer.from(
+    ethers.getBytes(ethers.keccak256(ethers.toUtf8Bytes(`railgun-${privyId}`)))
+  ).toString('hex')
 
   // Generate a fresh mnemonic for the wallet.
   const mnemonic = ethers.Wallet.createRandom().mnemonic?.phrase
