@@ -430,9 +430,6 @@ function CheckoutPage() {
         signer
       )
 
-      // Get decimals for the token
-      const decimals = await usdcContract.decimals()
-      
       // paymentInstructions.amount is already in storage format (6-digit string like "1000000")
       // Convert to BigInt for token transfer (amount is already in smallest unit)
       const amount = BigInt(paymentInstructions.amount)
