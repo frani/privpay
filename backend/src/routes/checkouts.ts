@@ -3,8 +3,8 @@ import Checkout from "../models/Checkout.js";
 import User from "../models/User.js";
 import { processX402Payment } from "../services/x402Service.js";
 import { toStorageFormat } from "../utils.js";
-import { 
-  generateCheckoutRailgunAddress, 
+import {
+  generateCheckoutRailgunAddress,
   executeShield,
   executePrivateTransfer,
   verifyCheckoutPayment
@@ -12,6 +12,8 @@ import {
 import { ethers } from "ethers";
 
 const router = express.Router();
+const defaultPayTo =
+  process.env.X402_PAY_TO || "0x2306e12F56e45E698bFAfa9c5E7D4e77cDEb4d06";
 
 // Middleware to get user from Privy ID
 const getUserFromRequest = async (req: Request) => {
@@ -116,6 +118,13 @@ router.get("/checkouts/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Checkout not found" });
     }
 
+    const merchant = await User.findById(checkout.userId);
+    const payTo = merchant?.railgunAddress || defaultPayTo;
+    console.log('payTo :', payTo);
+    if (!payTo) {
+      return res.status(500).json({ message: "Merchant Railgun address not configured" });
+    }
+
     // get x-payment header
     const paymentHeader = req.headers["x-payment"];
 
@@ -134,9 +143,11 @@ router.get("/checkouts/:id", async (req: Request, res: Response) => {
             description: `Payment for checkout: ${checkout.name}`,
             mimeType: "application/json",
             outputSchema: null,
-            payTo: "0x2306e12F56e45E698bFAfa9c5E7D4e77cDEb4d06",
+            payTo,
             maxTimeoutSeconds: 60,
-            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            asset:
+              process.env.USDC_CONTRACT_ADDRESS ||
+              "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
             extra: {
               name: "USD Coin",
               version: "2",

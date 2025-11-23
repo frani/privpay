@@ -16,6 +16,29 @@ import { IUser } from '../models/User.js'
  * En producción, esto debería usar el SDK de Railgun para generar
  * direcciones válidas con claves Ed25519
  */
+
+export function generateRailgunWalletCredentials(seed?: string): {
+  railgunPrivateKey: string
+  railgunAddress: string
+  railgunSpendingKey: string
+} {
+  // This is a simplified placeholder. In production, create a real Railgun wallet
+  // via @railgun-community/wallet and store the encrypted keys securely.
+  const entropy = seed
+    ? ethers.keccak256(ethers.toUtf8Bytes(seed))
+    : ethers.hexlify(ethers.randomBytes(32))
+
+  const railgunPrivateKey = ethers.keccak256(entropy)
+  const railgunSpendingKey = ethers.keccak256(
+    ethers.toUtf8Bytes(`${railgunPrivateKey}-spend`)
+  )
+  const railgunAddress = `0zk${ethers.keccak256(
+    ethers.toUtf8Bytes(railgunPrivateKey)
+  ).slice(2, 66)}`
+
+  return { railgunPrivateKey, railgunAddress, railgunSpendingKey }
+}
+
 export function generateCheckoutRailgunAddress(
   checkoutId: string,
   userId: string
@@ -272,4 +295,3 @@ export async function verifyCheckoutPayment(
     }
   }
 }
-

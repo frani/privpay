@@ -55,19 +55,11 @@ function Dashboard() {
     } catch (error: any) {
       if (error.response?.status === 404) {
         try {
-          // TODO: Generate or retrieve Railgun credentials
-          // These should come from your Railgun integration
-          // For now, using placeholder values - replace with actual implementation
-          const railgunPrivateKey = '0x...' // Generate from Railgun SDK
-          const railgunAddress = '0x...' // Derive from private key
-          
           await apiClient.post('/api/signup', {
             privyId: user.id,
             name: user.email?.address || user.wallet?.address || 'User',
             email: user.email?.address,
             walletAddress: user.wallet?.address,
-            railgunPrivateKey,
-            railgunAddress,
           })
         } catch (signupError) {
           console.error('Error signing up:', signupError)
