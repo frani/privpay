@@ -4,6 +4,7 @@ export interface IUser extends Document {
   name: string
   railgunPrivateKey: string
   railgunAddress: string
+  railgunSpendingKey?: string
   email?: string
   walletAddress?: string
   privyId: string
@@ -25,6 +26,10 @@ const UserSchema = new Schema<IUser>(
       type: String,
       required: true,
     },
+    railgunSpendingKey: {
+      type: String,
+      required: false,
+    },
     email: {
       type: String,
       sparse: true,
@@ -45,4 +50,3 @@ const UserSchema = new Schema<IUser>(
 )
 
 export default mongoose.model<IUser>('User', UserSchema)
-

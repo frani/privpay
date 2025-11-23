@@ -120,7 +120,6 @@ router.get("/checkouts/:id", async (req: Request, res: Response) => {
 
     const merchant = await User.findById(checkout.userId);
     const payTo = merchant?.railgunAddress || defaultPayTo;
-    console.log('payTo :', payTo);
     if (!payTo) {
       return res.status(500).json({ message: "Merchant Railgun address not configured" });
     }

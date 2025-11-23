@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
-import { ethers } from 'ethers'
 import User from '../models/User.js'
+import { createRailgunWalletForUser } from '../services/railgunService.js'
 
 const router = express.Router()
 
@@ -39,16 +39,24 @@ router.post('/signin', async (req: Request, res: Response) => {
 // POST /signup
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { privyId, email, walletAddress, name, railgunPrivateKey, railgunAddress } = req.body
+    const { privyId, email, walletAddress, name } = req.body
+
+    let { railgunPrivateKey, railgunAddress, railgunSpendingKey } = req.body
 
     if (!privyId) {
       return res.status(400).json({ message: 'Privy ID is required' })
     }
 
-    if (!name || !railgunPrivateKey || !railgunAddress) {
-      return res.status(400).json({ 
-        message: 'Name, railgunPrivateKey, and railgunAddress are required' 
-      })
+    if (!name) {
+      return res.status(400).json({ message: 'Name is required' })
+    }
+
+    // Auto-generate Railgun wallet credentials if not supplied by the client.
+    if (!railgunPrivateKey || !railgunAddress || !railgunSpendingKey) {
+      const generated = await createRailgunWalletForUser(privyId)
+      railgunPrivateKey = generated.railgunPrivateKey
+      railgunAddress = generated.railgunAddress
+      railgunSpendingKey = generated.railgunSpendingKey
     }
 
     // Check if user already exists
@@ -63,6 +71,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       name,
       railgunPrivateKey,
       railgunAddress,
+      railgunSpendingKey,
       email,
       walletAddress,
     })
@@ -142,4 +151,3 @@ router.get('/user/balance', async (req: Request, res: Response) => {
 })
 
 export default router
-
