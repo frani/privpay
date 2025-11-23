@@ -29,7 +29,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
     "stream-browserify": "^3.0.0",
-    "util": "^0.12.5"
+    "util": "^0.12.5",
+    "viem": "^2.39.3"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",

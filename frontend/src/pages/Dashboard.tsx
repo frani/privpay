@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
-import { useNavigate } from 'react-router-dom'
-import apiClient from '../lib/axios'
-import { fromStorageFormat } from '../utils.js'
-import { ethers } from 'ethers'
+import { useState, useEffect } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useNavigate } from "react-router-dom";
+import apiClient from "../lib/axios";
+import { fromStorageFormat } from "../utils.js";
+import { createPublicClient, custom, formatUnits } from "viem";
+import { polygon } from "viem/chains";
 import {
   Box,
   Button,
@@ -18,201 +19,229 @@ import {
   Badge,
   useToast,
   Image,
-} from '@chakra-ui/react'
-import CreateCheckoutModal from '../components/CreateCheckoutModal'
-import logo from '../assets/pp.png'
+} from "@chakra-ui/react";
+import CreateCheckoutModal from "../components/CreateCheckoutModal";
+import logo from "../assets/pp.png";
 
 interface Checkout {
-  _id: string
-  name: string
-  amount: string // Stored as 6-digit string (USDC format: 1000000 = 1.00)
-  createdAt: string
-  status: string
+  _id: string;
+  name: string;
+  amount: string; // Stored as 6-digit string (USDC format: 1000000 = 1.00)
+  createdAt: string;
+  status: string;
 }
 
 function Dashboard() {
-  const { user, logout } = usePrivy()
-  const navigate = useNavigate()
-  const toast = useToast()
-  const [checkouts, setCheckouts] = useState<Checkout[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [balance, setBalance] = useState<string | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(true)
+  const { user, logout } = usePrivy();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [checkouts, setCheckouts] = useState<Checkout[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
 
   useEffect(() => {
     if (user?.id) {
-      syncUserWithBackend()
-      fetchCheckouts()
-      fetchBalance()
+      syncUserWithBackend();
+      fetchCheckouts();
+      fetchBalance();
     }
-  }, [user?.id])
+  }, [user?.id]);
 
   const syncUserWithBackend = async () => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
     try {
-      await apiClient.post('/api/signin', { privyId: user.id })
+      await apiClient.post("/api/signin", { privyId: user.id });
     } catch (error: any) {
       if (error.response?.status === 404) {
         try {
-          await apiClient.post('/api/signup', {
+          await apiClient.post("/api/signup", {
             privyId: user.id,
-            name: user.email?.address || user.wallet?.address || 'User',
+            name: user.email?.address || user.wallet?.address || "User",
             email: user.email?.address,
             walletAddress: user.wallet?.address,
-          })
+          });
         } catch (signupError) {
-          console.error('Error signing up:', signupError)
+          console.error("Error signing up:", signupError);
           toast({
-            title: 'Signup Error',
-            description: 'Failed to create user account. Please ensure Railgun credentials are configured.',
-            status: 'error',
+            title: "Signup Error",
+            description:
+              "Failed to create user account. Please ensure Railgun credentials are configured.",
+            status: "error",
             duration: 5000,
             isClosable: true,
-          })
+          });
         }
       }
     }
-  }
+  };
 
   const fetchCheckouts = async () => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
     try {
-      setLoading(true)
-      const response = await apiClient.get('/api/checkouts', {
+      setLoading(true);
+      const response = await apiClient.get("/api/checkouts", {
         headers: {
           Authorization: `Bearer ${user.id}`,
         },
-      })
-      setCheckouts(response.data)
+      });
+      setCheckouts(response.data);
     } catch (error) {
-      console.error('Error fetching checkouts:', error)
+      console.error("Error fetching checkouts:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to fetch checkouts',
-        status: 'error',
+        title: "Error",
+        description: "Failed to fetch checkouts",
+        status: "error",
         duration: 3000,
         isClosable: true,
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchBalance = async () => {
-    try {
-      setBalanceLoading(true)
+    if (!user?.id || !user.wallet?.address) {
+      setBalanceLoading(false);
+      return;
+    }
 
-      const ethereum = (window as any).ethereum
+    try {
+      setBalanceLoading(true);
+      console.log("fetchBalance");
+
+      const ethereum = (window as any).ethereum;
       if (!ethereum) {
-        throw new Error('No wallet found')
+        console.warn("No injected wallet found for balance fetch");
+        setBalance(null);
+        return;
       }
 
-      // Ensure connection
-      await ethereum.request({ method: 'eth_requestAccounts' })
-
-      const provider = new ethers.BrowserProvider(ethereum)
-      const signer = await provider.getSigner()
-      const userAddress = await signer.getAddress()
+      const [userAddress] = (await ethereum.request({
+        method: "eth_requestAccounts",
+      })) as string[];
 
       const tokenAddress =
-        import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
-        '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
+        (import.meta.env.VITE_USDC_CONTRACT_ADDRESS as `0x${string}`) ||
+        ("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as const);
 
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        [
-          'function balanceOf(address account) external view returns (uint256)',
-          'function decimals() external view returns (uint8)',
-        ],
-        provider
-      )
+      const client = createPublicClient({
+        chain: polygon,
+        transport: custom(ethereum),
+      });
+
+      const erc20Abi = [
+        {
+          name: "balanceOf",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [{ name: "", type: "uint256" }],
+        },
+        {
+          name: "decimals",
+          type: "function",
+          stateMutability: "view",
+          inputs: [],
+          outputs: [{ name: "", type: "uint8" }],
+        },
+      ] as const;
 
       const [rawBalance, decimals] = await Promise.all([
-        tokenContract.balanceOf(userAddress),
-        tokenContract.decimals(),
-      ])
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [userAddress as `0x${string}`],
+        }),
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "decimals",
+        }),
+      ]);
 
-      setBalance(ethers.formatUnits(rawBalance, decimals))
+      setBalance(formatUnits(rawBalance as bigint, decimals as number));
     } catch (error) {
-      console.error('Error fetching balance via wallet:', error)
+      console.error("Error fetching balance via wallet:", error);
     } finally {
-      setBalanceLoading(false)
+      setBalanceLoading(false);
     }
-  }
+  };
 
   const handleCreateCheckout = async (name: string, amount: number) => {
     if (!user?.id) {
       toast({
-        title: 'Error',
-        description: 'Please sign in to create a checkout',
-        status: 'error',
+        title: "Error",
+        description: "Please sign in to create a checkout",
+        status: "error",
         duration: 3000,
         isClosable: true,
-      })
-      return
+      });
+      return;
     }
 
     try {
       const response = await apiClient.post(
-        '/api/checkouts',
+        "/api/checkouts",
         { name, amount },
         {
           headers: {
             Authorization: `Bearer ${user.id}`,
           },
         }
-      )
-      setCheckouts([...checkouts, response.data])
-      setIsModalOpen(false)
+      );
+      setCheckouts([...checkouts, response.data]);
+      setIsModalOpen(false);
       toast({
-        title: 'Success',
-        description: 'Checkout created successfully',
-        status: 'success',
+        title: "Success",
+        description: "Checkout created successfully",
+        status: "success",
         duration: 3000,
         isClosable: true,
-      })
+      });
     } catch (error) {
-      console.error('Error creating checkout:', error)
+      console.error("Error creating checkout:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to create checkout. Please try again.',
-        status: 'error',
+        title: "Error",
+        description: "Failed to create checkout. Please try again.",
+        status: "error",
         duration: 3000,
         isClosable: true,
-      })
+      });
     }
-  }
+  };
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/')
-  }
+    await logout();
+    navigate("/");
+  };
 
   const copyCheckoutLink = (id: string) => {
-    const link = `${window.location.origin}/checkout/${id}`
-    navigator.clipboard.writeText(link)
+    const link = `${window.location.origin}/checkout/${id}`;
+    navigator.clipboard.writeText(link);
     toast({
-      title: 'Link copied!',
-      description: 'Checkout link copied to clipboard',
-      status: 'success',
+      title: "Link copied!",
+      description: "Checkout link copied to clipboard",
+      status: "success",
       duration: 2000,
       isClosable: true,
-    })
-  }
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-        return 'green'
-      case 'failed':
-        return 'red'
+      case "completed":
+        return "green";
+      case "failed":
+        return "red";
       default:
-        return 'yellow'
+        return "yellow";
     }
-  }
+  };
 
   return (
     <Box minH="100vh">
@@ -250,7 +279,9 @@ function Dashboard() {
                   <Spinner size="sm" color="blue.500" />
                 ) : (
                   <Text fontSize="3xl" fontWeight="bold" color="blue.600">
-                    ${balance !== null ? parseFloat(balance).toFixed(2) : '0.00'} USDC
+                    $
+                    {balance !== null ? parseFloat(balance).toFixed(2) : "0.00"}{" "}
+                    USDC
                   </Text>
                 )}
               </VStack>
@@ -347,4 +378,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard
+export default Dashboard;
