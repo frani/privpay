@@ -2,6 +2,14 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
+import {
+  createPublicClient,
+  custom as viemCustom,
+  defineChain,
+  formatUnits,
+  erc20Abi,
+  type Chain,
+} from "viem";
 import apiClient from "../lib/axios";
 import { fromStorageFormat } from "../utils.js";
 import {
@@ -117,7 +125,13 @@ function CheckoutPage() {
   useEffect(() => {
     fetchUserBalance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, privyUser?.id]);
+  }, [
+    ready,
+    authenticated,
+    privyUser?.id,
+    paymentInstructions?.asset,
+    paymentInstructions?.network,
+  ]);
 
   const fetchCheckout = async () => {
     try {
@@ -220,19 +234,241 @@ function CheckoutPage() {
     };
   };
 
+  const resolveExpectedChainId = (): number => {
+    const network = paymentInstructions?.network?.toLowerCase();
+    if (network === "polygon") return 137;
+    if (network === "ethereum") return 1;
+    return Number(import.meta.env.VITE_CHAIN_ID || 137);
+  };
+
+const resolveTokenAddress = (): string => {
+  return (
+    paymentInstructions?.asset ||
+    import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
+    "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+  );
+};
+
   const fetchUserBalance = async () => {
-    if (!ready || !authenticated || !privyUser?.id) return;
+    if (!ready || !authenticated) return;
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) return;
+
     try {
       setUserBalanceLoading(true);
-      const res = await apiClient.get("/api/user/balance", {
-        headers: { Authorization: `Bearer ${privyUser.id}` },
+      await ethereum.request({ method: "eth_requestAccounts" });
+      const accounts: string[] = await ethereum.request({
+        method: "eth_accounts",
       });
-      setUserBalance(res.data.balanceFormatted || res.data.balance);
+      const userAddress = accounts[0] as `0x${string}` | undefined;
+      if (!userAddress) {
+        setUserBalance(null);
+        return;
+      }
+
+      const expectedChainId = resolveExpectedChainId();
+      const chainName =
+        paymentInstructions?.network ||
+        import.meta.env.VITE_CHAIN_NAME ||
+        "Polygon";
+      const rpcUrl =
+        import.meta.env.VITE_POLYGON_RPC_URL || "https://polygon-rpc.com";
+      const blockExplorerUrl =
+        import.meta.env.VITE_BLOCK_EXPLORER_URL || "https://polygonscan.com";
+
+      const chain: Chain = defineChain({
+        id: expectedChainId,
+        name: chainName,
+        nativeCurrency: {
+          name: import.meta.env.VITE_CHAIN_CURRENCY_NAME || "MATIC",
+          symbol: import.meta.env.VITE_CHAIN_CURRENCY_SYMBOL || "MATIC",
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+        blockExplorers: {
+          default: { name: chainName, url: blockExplorerUrl },
+        },
+      });
+
+      const client = createPublicClient({
+        chain,
+        transport: viemCustom(ethereum),
+      });
+
+      const tokenAddress = resolveTokenAddress() as `0x${string}`;
+
+      const [rawBalance, decimals] = await Promise.all([
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [userAddress],
+        }),
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "decimals",
+        }),
+      ]);
+
+      setUserBalance(formatUnits(rawBalance as bigint, decimals as number));
     } catch (err) {
       console.error("Error fetching user balance", err);
       setUserBalance(null);
     } finally {
       setUserBalanceLoading(false);
+    }
+  };
+
+  const handleShieldPaymentFromInstructions = async () => {
+    if (!paymentInstructions || !paymentInstructions.payTo) return;
+
+    if (!ready || !authenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please connect your wallet to make a payment",
+        status: "warning",
+        duration: 5000,
+        isClosable: true,
+      });
+      await login();
+      return;
+    }
+
+    try {
+      setProcessing(true);
+
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        throw new Error(
+          "No Ethereum wallet found. Please install MetaMask or connect a wallet."
+        );
+      }
+
+      await ethereum.request({ method: "eth_requestAccounts" });
+      const accounts: string[] = await ethereum.request({
+        method: "eth_accounts",
+      });
+      const userAddress = accounts[0] as `0x${string}` | undefined;
+      if (!userAddress) {
+        throw new Error("No wallet account found");
+      }
+
+      const expectedChainId =
+        paymentInstructions.network?.toLowerCase() === "polygon"
+          ? 137
+          : paymentInstructions.network?.toLowerCase() === "ethereum"
+          ? 1
+          : Number(import.meta.env.VITE_CHAIN_ID || 137);
+      const config = await ensureRailgunReady(expectedChainId);
+      const chain: Chain = defineChain({
+        id: config.chainId,
+        name: config.label,
+        nativeCurrency: {
+          name: import.meta.env.VITE_CHAIN_CURRENCY_NAME || "MATIC",
+          symbol: import.meta.env.VITE_CHAIN_CURRENCY_SYMBOL || "MATIC",
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: { http: [config.rpcUrl] },
+          public: { http: [config.rpcUrl] },
+        },
+        blockExplorers: {
+          default: { name: config.label, url: "https://polygonscan.com" },
+        },
+      });
+
+      const client = createPublicClient({
+        chain,
+        transport: viemCustom(ethereum),
+      });
+
+      const tokenAddress = resolveTokenAddress() as `0x${string}`;
+
+      // Check balance
+      const [rawBalance, decimals] = await Promise.all([
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [userAddress],
+        }),
+        client.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "decimals",
+        }),
+      ]);
+
+      const amount = BigInt(paymentInstructions.amount);
+      const balanceBigInt = rawBalance as bigint;
+      if (balanceBigInt < amount) {
+        throw new Error("Insufficient USDC balance");
+      }
+
+      toast({
+        title: "Shielding Payment",
+        description: "Sending private payment to checkout address...",
+        status: "info",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      // Railgun shield flow using shared helper
+      const signer = await new ethers.BrowserProvider(ethereum).getSigner();
+      const shieldPrivateKey = await deriveShieldPrivateKey(signer);
+      const shieldTxRequest = await buildShieldTransactionRequest({
+        config,
+        shieldPrivateKey,
+        tokenAddress,
+        amount,
+        recipientAddress: paymentInstructions.payTo,
+      });
+
+      const shieldTx = await signer.sendTransaction(shieldTxRequest);
+
+      toast({
+        title: "Shield Transaction Submitted",
+        description: "Waiting for confirmation...",
+        status: "info",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      const receipt = await shieldTx.wait();
+      if (!receipt) {
+        throw new Error("Shield transaction failed or not mined");
+      }
+
+      toast({
+        title: "Payment Successful!",
+        description: `Transaction: ${receipt.hash.slice(0, 10)}...${receipt.hash.slice(
+          -8
+        )}`,
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+
+      // Set payment hash to retry fetch with header
+      setPaymentHash(receipt.hash);
+      await fetchCheckout();
+    } catch (error: any) {
+      console.error("Error processing private payment from instructions:", error);
+      toast({
+        title: "Payment Failed",
+        description:
+          error?.message ||
+          "Private payment failed. Please ensure you are on the correct network and try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -434,109 +670,6 @@ function CheckoutPage() {
     }
   };
 
-  const handlePayment = async () => {
-    if (!paymentInstructions) return;
-
-    // Check if user is authenticated
-    if (!ready || !authenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please connect your wallet to make a payment",
-        status: "warning",
-        duration: 5000,
-        isClosable: true,
-      });
-      await login();
-      return;
-    }
-
-    try {
-      setProcessing(true);
-
-      // Check for Ethereum provider
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) {
-        throw new Error(
-          "No Ethereum wallet found. Please install MetaMask or connect a wallet."
-        );
-      }
-
-      // Request account access if needed
-      await ethereum.request({ method: "eth_requestAccounts" });
-
-      const ethersProvider = new ethers.BrowserProvider(ethereum);
-      const signer = await ethersProvider.getSigner();
-      const userAddress = await signer.getAddress();
-
-      // Get USDC contract
-      const usdcContract = new ethers.Contract(
-        paymentInstructions.asset,
-        ERC20_ABI,
-        signer
-      );
-
-      // paymentInstructions.amount is already in storage format (6-digit string like "1000000")
-      // Convert to BigInt for token transfer (amount is already in smallest unit)
-      const amount = BigInt(paymentInstructions.amount);
-
-      // Check balance
-      const balance = await usdcContract.balanceOf(userAddress);
-      if (balance < amount) {
-        throw new Error("Insufficient USDC balance");
-      }
-
-      // Send USDC transfer
-      const tx = await usdcContract.transfer(paymentInstructions.payTo, amount);
-
-      toast({
-        title: "Transaction Submitted",
-        description: "Waiting for confirmation...",
-        status: "info",
-        duration: 3000,
-        isClosable: true,
-      });
-
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      const txHash = receipt.hash;
-
-      // Store payment hash and retry fetching checkout
-      setPaymentHash(txHash);
-
-      toast({
-        title: "Payment Successful!",
-        description: `Transaction: ${txHash.slice(0, 10)}...${txHash.slice(
-          -8
-        )}`,
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-      });
-
-      // Retry fetching checkout with payment header
-      await fetchCheckout();
-    } catch (error: any) {
-      console.error("Error processing payment:", error);
-
-      let errorMessage = "Payment failed. Please try again.";
-      if (error.code === 4001) {
-        errorMessage = "Transaction was rejected by user";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      toast({
-        title: "Payment Failed",
-        description: errorMessage,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   if (loading) {
     return (
       <Box
@@ -609,6 +742,20 @@ function CheckoutPage() {
                         {paymentInstructions.network}
                       </Badge>
                     </Box>
+                    {ready && authenticated && (
+                      <Box>
+                        <Text fontSize="xs" color="gray.600" mb={1}>
+                          Your balance (USDC)
+                        </Text>
+                        <Text fontSize="sm" color="gray.700" fontWeight="semibold">
+                          {userBalanceLoading
+                            ? "Loading…"
+                            : userBalance
+                            ? `${userBalance}`
+                            : "Unavailable"}
+                        </Text>
+                      </Box>
+                    )}
                     <Box>
                       <Text
                         fontSize="sm"
@@ -625,44 +772,46 @@ function CheckoutPage() {
                         display="block"
                         bg="purple.50"
                         color="purple.700"
+                    >
+                      {paymentInstructions.payTo}
+                    </Code>
+                    <Text fontSize="xs" color="gray.600" mt={2}>
+                      Note: send via the shield flow (Pay Now); MetaMask
+                      cannot transfer directly to 0zk addresses.
+                    </Text>
+                  </Box>
+
+                  <VStack spacing={3} align="stretch">
+                    <Button
+                      onClick={handleShieldPaymentFromInstructions}
+                      isLoading={processing}
+                      loadingText="Paying privately..."
+                      colorScheme="blue"
+                      size="lg"
+                      w="full"
+                      isDisabled={!ready || !authenticated}
+                    >
+                      Pay Now
+                    </Button>
+                    {!ready || !authenticated ? (
+                      <Button
+                        onClick={login}
+                        isLoading={!ready}
+                        loadingText="Connecting wallet..."
+                        variant="outline"
+                        colorScheme="blue"
+                        size="md"
+                        w="full"
                       >
-                        {paymentInstructions.payTo}
-                      </Code>
-                      <Text fontSize="xs" color="gray.600" mt={2}>
-                        Note: send via the shield flow (Pay Now); MetaMask
-                        cannot transfer directly to 0zk addresses.
-                      </Text>
-                    </Box>
+                        Connect Wallet
+                      </Button>
+                    ) : null}
                   </VStack>
-                </Box>
+                </VStack>
+              </Box>
 
-                <Button
-                  onClick={handlePayment}
-                  isLoading={processing}
-                  loadingText="Processing Payment..."
-                  colorScheme="blue"
-                  size="lg"
-                  w="full"
-                  isDisabled={!ready || !authenticated}
-                >
-                  {!ready || !authenticated
-                    ? "Connect Wallet to Pay"
-                    : "Pay Now"}
-                </Button>
-
-                {!ready || !authenticated ? (
-                  <Button
-                    onClick={login}
-                    variant="outline"
-                    colorScheme="blue"
-                    size="md"
-                    w="full"
-                  >
-                    Connect Wallet
-                  </Button>
-                ) : null}
-              </VStack>
-            </CardBody>
+            </VStack>
+          </CardBody>
           </Card>
         </Container>
       </Box>
@@ -714,7 +863,7 @@ function CheckoutPage() {
                 </Heading>
                 <Text color="gray.500">Payment Checkout</Text>
                 {ready && authenticated && (
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="xs" color="gray.600">
                     Balance:{" "}
                     {userBalanceLoading
                       ? "…"
@@ -874,8 +1023,12 @@ function CheckoutPage() {
                   </Button>
                   <Button
                     onClick={handleShieldPayment}
-                    isLoading={processing}
-                    loadingText="Shielding Payment..."
+                    isLoading={processing || (!ready && !authenticated)}
+                    loadingText={
+                      processing
+                        ? "Shielding Payment..."
+                        : "Connecting wallet..."
+                    }
                     colorScheme="purple"
                     size="lg"
                     w="full"
@@ -888,6 +1041,8 @@ function CheckoutPage() {
                   {(!ready || !authenticated) && (
                     <Button
                       onClick={login}
+                      isLoading={!ready}
+                      loadingText="Connecting wallet..."
                       variant="outline"
                       colorScheme="purple"
                       size="md"

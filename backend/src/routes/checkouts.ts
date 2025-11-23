@@ -146,7 +146,7 @@ router.get("/checkouts/:id", async (req: Request, res: Response) => {
             maxTimeoutSeconds: 60,
             asset:
               process.env.USDC_CONTRACT_ADDRESS ||
-              "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
             extra: {
               name: "USD Coin",
               version: "2",

@@ -149,8 +149,10 @@ router.get('/user/balance', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'User wallet address not found' })
     }
 
-    // Get USDC contract address from environment
-    const tokenAddress = process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    // Get USDC contract address from environment (default: Polygon native USDC)
+    const tokenAddress =
+      process.env.USDC_CONTRACT_ADDRESS ||
+      '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
     const rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com'
 
     // Create provider and contract
