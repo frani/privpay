@@ -62,8 +62,6 @@ router.post('/signup', async (req: Request, res: Response) => {
       name,
     })
 
-    let { railgunPrivateKey, railgunAddress, railgunSpendingKey } = req.body
-
     if (!privyId) {
       return res.status(400).json({ message: 'Privy ID is required' })
     }
@@ -72,18 +70,26 @@ router.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Name is required' })
     }
 
+    // Check if user already exists BEFORE creating wallet
+    const existingUser = await User.findOne({ privyId })
+    console.log('existingUser :', existingUser);
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' })
+    }
+
+    let { railgunPrivateKey, railgunAddress, railgunSpendingKey } = req.body
+
     // Auto-generate Railgun wallet credentials if not supplied by the client.
     if (!railgunPrivateKey || !railgunAddress || !railgunSpendingKey) {
+      console.log('[signup] generating Railgun wallet...')
       const generated = await createRailgunWalletForUser(privyId)
+      console.log('[signup] wallet generated:', {
+        railgunAddress: generated.railgunAddress,
+        walletId: generated.railgunWalletId
+      });
       railgunPrivateKey = generated.railgunPrivateKey
       railgunAddress = generated.railgunAddress
       railgunSpendingKey = generated.railgunSpendingKey
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ privyId })
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' })
     }
 
     // Create new user
@@ -115,7 +121,12 @@ router.post('/signup', async (req: Request, res: Response) => {
     if (error.code === 11000) {
       return res.status(400).json({ message: 'User already exists' })
     }
-    res.status(500).json({ message: 'Internal server error' })
+    const errorMessage = error.message || 'Internal server error'
+    console.error('[signup] error details:', errorMessage)
+    res.status(500).json({
+      message: 'Internal server error',
+      error: errorMessage
+    })
   }
 })
 
