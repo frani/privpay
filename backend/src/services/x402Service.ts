@@ -96,7 +96,7 @@ export async function verifyPayment(
     // The payment payload should be a signed transaction or payment proof
     const verifyUrl = `${facilitator}/verify`
     
-    const response = await fetch(verifyUrl, {
+    const response: Response = await fetch(verifyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -164,7 +164,7 @@ async function settlePayment(
 
     const settleUrl = `${facilitator}/settle`
 
-    const response = await fetch(settleUrl, {
+    const response: Response = await fetch(settleUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
